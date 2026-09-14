@@ -2322,6 +2322,17 @@ describe("scripts/test-projects changed-target routing", () => {
     },
   );
 
+  it.each([
+    "src/logging/diagnostic-session-context.test.ts",
+    "src/logging/diagnostic-stuck-session-recovery.runtime.test.ts",
+    "src/state/openclaw-state-db.test.ts",
+  ])("routes cron save-only fixture %s to the existing fork owner", (testFile) => {
+    expectSingleVitestRunPlan(buildVitestRunPlans([testFile]), {
+      config: "test/vitest/vitest.infra.config.ts",
+      includePatterns: [testFile],
+    });
+  });
+
   it.each(["src/plugin-sdk/memory-host-events.ts", "src/plugin-sdk/persistent-dedupe.ts"])(
     "preserves database consumer coverage for source target %s",
     (sourceFile) => {
@@ -2405,6 +2416,10 @@ describe("scripts/test-projects changed-target routing", () => {
       "src/plugins/doctor-contract-registry.load-paths.test.ts",
     ],
     ["test/vitest/vitest.plugin-sdk.config.ts", "src/plugin-sdk/provider-auth.test.ts"],
+    [
+      "test/vitest/vitest.unit-fast.config.ts",
+      "src/logging/diagnostic-stuck-session-recovery.runtime.test.ts",
+    ],
   ])("preserves whole-owner watch coverage for %s with %s", (config, file) => {
     const [plan] = buildVitestRunPlans(["--watch", config, file]);
     expect(plan).toMatchObject({
@@ -2431,19 +2446,22 @@ describe("scripts/test-projects changed-target routing", () => {
     );
   });
 
-  it.each(["src/plugin-state", "src/plugin-sdk", "src/agents", "src/commands", "test/plugins"])(
-    "retains database worker ownership for directory and glob target %s",
-    (directory) => {
-      const expected = databaseWorkerCoreTestFiles.filter((file) =>
-        file.startsWith(`${directory}/`),
-      );
-      for (const target of [directory, `${directory}/**/*.test.ts`]) {
-        const plans = buildVitestRunPlans([target]);
-        const infra = plans.find((plan) => plan.config === "test/vitest/vitest.infra.config.ts");
-        expect(infra?.includePatterns).toEqual(expected);
-      }
-    },
-  );
+  it.each([
+    "src/plugin-state",
+    "src/plugin-sdk",
+    "src/agents",
+    "src/commands",
+    "src/logging",
+    "src/state",
+    "test/plugins",
+  ])("retains database worker ownership for directory and glob target %s", (directory) => {
+    const expected = databaseWorkerCoreTestFiles.filter((file) => file.startsWith(`${directory}/`));
+    for (const target of [directory, `${directory}/**/*.test.ts`]) {
+      const plans = buildVitestRunPlans([target]);
+      const infra = plans.find((plan) => plan.config === "test/vitest/vitest.infra.config.ts");
+      expect(infra?.includePatterns).toEqual(expected);
+    }
+  });
 
   it.each(agentVitestProjectOwners.coreIsolated.include)(
     "routes isolated agent test %s to the isolated agents-core shard",

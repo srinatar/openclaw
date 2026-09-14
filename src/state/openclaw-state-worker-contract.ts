@@ -5,6 +5,7 @@ import type {
   ConfigHealthEntryBasis,
 } from "../config/io.health-state.types.js";
 import type { CronStoreWorkerOperations } from "../cron/store/load-worker.types.js";
+import type { CronStoreSaveWorkerOperations } from "../cron/store/save-worker.types.js";
 import type { SessionDeliveryWorkerOperations } from "../infra/session-delivery-queue.worker-contract.js";
 import type { PreparedSqliteAuditRecord } from "../infra/sqlite-audit-record.kernel.js";
 import type { SqliteFileGeneration } from "../infra/sqlite-file-generation.js";
@@ -47,6 +48,7 @@ type TaskFlowReadQuery = {
 export type OpenClawStateWorkerOperations = PluginStateWorkerOperations &
   UserPreferenceWorkerOperations &
   CronStoreWorkerOperations &
+  CronStoreSaveWorkerOperations &
   SessionDeliveryWorkerOperations & {
     "projects.findRoot": { input: { repoRoot: string }; output: string | undefined };
     "plugins.metadata.read": {
