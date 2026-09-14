@@ -174,7 +174,6 @@ export function replaceCronStoreRowsInDatabase(
   });
 }
 
-/** Persists a validated store inside the caller's synchronous write transaction. */
 export function isCronRuntimeOnlySave(opts?: CronStoreSaveOptions): boolean {
   return (
     opts?.stateOnly === true &&
@@ -183,6 +182,7 @@ export function isCronRuntimeOnlySave(opts?: CronStoreSaveOptions): boolean {
   );
 }
 
+/** Persists a validated store inside the caller's synchronous write transaction. */
 export function saveCronStoreInDatabase(
   database: OpenClawStateDatabase,
   storeKey: string,

@@ -59,12 +59,15 @@ export type {
 export { loadCronQuarantinedJobs, saveCronQuarantinedJobs } from "./store/quarantine.js";
 
 const MAX_TRACKED_CRON_STORE_REVISIONS = 64;
+// Stale receipts must never equal a nonnegative publication fact, even after eviction.
+const STALE_CRON_STORE_REVISION = -1;
 const cronStoreRevisions = new Map<string, number>();
 let nextCronStoreRevision = 0;
 
 /** Reads the process-local committed revision for one canonical SQLite partition. */
 export function getCronJobsStoreRevision(storePath: string): number {
-  return cronStoreRevisions.get(cronStoreKey(storePath)) ?? 0;
+  // Eviction must not resurrect a snapshot's earlier revision.
+  return cronStoreRevisions.get(cronStoreKey(storePath)) ?? nextCronStoreRevision;
 }
 
 export function noteCronJobsStoreCommit(storeKey: string): void {
@@ -247,10 +250,10 @@ type CronStoreReplacementOptions = Pick<
 type CronStoreCommit<Value> = { value: Value; revision: number };
 
 function publishCronStoreSaveRevision(storeKey: string, observedRevision: number): number {
-  const unchanged = (cronStoreRevisions.get(storeKey) ?? 0) === observedRevision;
+  const unchanged = getCronJobsStoreRevision(storeKey) === observedRevision;
   noteCronJobsStoreCommit(storeKey);
   // A host write across worker admission leaves the returned snapshot conservatively stale.
-  return unchanged ? nextCronStoreRevision : observedRevision;
+  return unchanged ? nextCronStoreRevision : STALE_CRON_STORE_REVISION;
 }
 
 function commitCronStoreNative<Value>(
@@ -259,7 +262,7 @@ function commitCronStoreNative<Value>(
   hooks: CronStoreTransactionHooks | undefined,
   operationLabel?: string,
 ): CronStoreCommit<Value> {
-  const observedRevision = cronStoreRevisions.get(storeKey) ?? 0;
+  const observedRevision = getCronJobsStoreRevision(storeKey);
   let committed = false;
   try {
     const value = runOpenClawStateWriteTransaction(
@@ -289,7 +292,7 @@ async function saveCronStoreWithWorker<Value>(
     scope: Pick<SqliteWorkerStore<CronStoreSaveWorkerOperations>, "execute">,
   ) => Promise<CronStoreWriteResult<Value>>,
 ): Promise<CronStoreCommit<Value>> {
-  const observedRevision = cronStoreRevisions.get(storeKey) ?? 0;
+  const observedRevision = getCronJobsStoreRevision(storeKey);
   const context = captureOpenClawStateWorkerContext();
   let received = false;
   try {
@@ -325,7 +328,7 @@ export function saveCronJobsStoreChangesWithRevisionNative(
   const storeKey = cronStoreKey(path.resolve(storePath));
   const prepared = prepareCronStoreChanges(previous, next);
   if (prepared.changedIds.size === 0) {
-    return { value: previous, revision: cronStoreRevisions.get(storeKey) ?? 0 };
+    return { value: previous, revision: getCronJobsStoreRevision(storeKey) };
   }
   const { transactionHooks, ...options } = opts ?? {};
   return commitCronStoreNative(
@@ -351,7 +354,7 @@ export async function saveCronJobsStoreChangesWithRevision(
   const storeKey = cronStoreKey(path.resolve(storePath));
   const prepared = prepareCronStoreChanges(previous, next);
   if (prepared.changedIds.size === 0) {
-    return { value: previous, revision: cronStoreRevisions.get(storeKey) ?? 0 };
+    return { value: previous, revision: getCronJobsStoreRevision(storeKey) };
   }
   const { transactionHooks: _hooks, ...options } = opts ?? {};
   const input = structuredClone({ storeKey, changes: prepared, options });

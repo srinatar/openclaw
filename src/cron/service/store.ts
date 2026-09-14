@@ -162,8 +162,8 @@ export async function ensureLoaded(
     deferQuarantinePersist?: boolean;
   },
 ) {
-  // Keep scheduler-local pacing/catch-up mutations unless another in-process
-  // owner actually committed a newer snapshot for this SQLite partition.
+  // Keep scheduler-local pacing/catch-up mutations while the publication fact
+  // still matches; evicted partitions conservatively use the global sequence.
   if (state.store && !opts?.forceReload) {
     const loadedRevision = loadedCronStoreRevisions.get(state);
     if (

@@ -39,6 +39,8 @@ runtime-only updates, quarantine changes, and changed-row merges retain their
 existing transaction boundaries. Save results publish committed or uncertain
 invalidation before settlement. Internal service callers receive an operation-bound
 revision; intervening host writes leave the returned snapshot conservatively stale.
+Evicted revision entries fall back to the existing global publication sequence,
+and stale save receipts use a negative marker that cannot match a current revision.
 Public save signatures and return values are unchanged. Service mutations with
 commit guards, one-use authority capture, or caller preconditions retain their
 synchronous call-through to the native kernels; their worker admission remains

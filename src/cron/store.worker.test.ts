@@ -481,6 +481,48 @@ describe("worker save result publication", () => {
   });
 
   it.each([false, true])(
+    "keeps a stale save distinguishable after partition eviction before reply=%s",
+    async (evictBeforeReply) => {
+      const storePath = `/synthetic/cron-save-eviction-${evictBeforeReply}/jobs.json`;
+      const pending = createDeferred<CronStoreSaveWorkerOperations["cron.save"]["output"]>();
+      vi.spyOn(stateWorker, "runOpenClawStateWorkerOperation").mockImplementation(
+        async (_context, operation) =>
+          operation({ execute: vi.fn().mockReturnValue(pending.promise) }),
+      );
+      const evictPartition = () => {
+        for (let index = 0; index < 65; index += 1) {
+          noteCronJobsStoreCommit(
+            `/synthetic/cron-save-eviction-${evictBeforeReply}/peer-${index}`,
+          );
+        }
+      };
+      const save = saveCronJobsStoreWithRevision(storePath, { version: 1, jobs: [] });
+      noteCronJobsStoreCommit(storePath);
+      if (evictBeforeReply) {
+        evictPartition();
+      }
+      pending.resolve({ ok: true, committed: true, value: undefined });
+      const result = await save;
+      expect(result.revision).not.toBe(getCronJobsStoreRevision(storePath));
+      evictPartition();
+      expect(result.revision).not.toBe(getCronJobsStoreRevision(storePath));
+    },
+  );
+
+  it("does not reuse an untracked load revision after its committed partition is evicted", () => {
+    const storePath = "/synthetic/cron-load-revision-eviction/jobs.json";
+    const loadedRevision = getCronJobsStoreRevision(storePath);
+    noteCronJobsStoreCommit(storePath);
+    const trackedRevision = getCronJobsStoreRevision(storePath);
+    noteCronJobsStoreCommit("/synthetic/cron-load-revision-eviction/peer-0");
+    expect(getCronJobsStoreRevision(storePath)).toBe(trackedRevision);
+    for (let index = 1; index < 65; index += 1) {
+      noteCronJobsStoreCommit(`/synthetic/cron-load-revision-eviction/peer-${index}`);
+    }
+    expect(getCronJobsStoreRevision(storePath)).not.toBe(loadedRevision);
+  });
+
+  it.each([false, true])(
     "returns an operation-bound revision when an intervening commit exists=%s",
     async (intervening) => {
       const storePath = `/synthetic/cron-save-revision-${intervening}/jobs.json`;
@@ -498,7 +540,11 @@ describe("worker save result publication", () => {
       const result = await save;
       const latest = getCronJobsStoreRevision(storePath);
       expect(latest).toBeGreaterThan(before);
-      expect(result.revision).toBe(intervening ? before : latest);
+      if (intervening) {
+        expect(result.revision).toBeLessThan(0);
+      } else {
+        expect(result.revision).toBe(latest);
+      }
     },
   );
 });
